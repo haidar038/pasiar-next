@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { usePosts } from "@/contexts/PostsContext";
 import { CreatePostData, UpdatePostData, Post, Category, Tag } from "@/types/post";
 
@@ -12,7 +13,10 @@ interface PostFormProps {
 }
 
 export default function PostForm({ post, onSuccess, onCancel }: PostFormProps) {
+    const { user } = useAuth();
     const { createPost, updatePost, categories, tags, fetchCategories, fetchTags, isLoading, error } = usePosts();
+
+    const isContributor = user?.roles?.includes("contributor") ?? false;
 
     const [formData, setFormData] = useState<CreatePostData>({
         title: "",
@@ -36,13 +40,27 @@ export default function PostForm({ post, onSuccess, onCancel }: PostFormProps) {
         fetchTags();
     }, []);
 
+    // Helper function to strip HTML tags using regex
+    const stripHtmlTags = (html: string): string => {
+        return html.replace(/<[^>]*>/g, "");
+    };
+
+    // Helper function to handle HTML content
+    const parseHtmlContent = (html: string): string => {
+        // If the content appears to be HTML (contains tags), strip them for editing
+        if (html && (html.includes("</") || html.includes("/>"))) {
+            return stripHtmlTags(html);
+        }
+        return html;
+    };
+
     // Populate form when editing
     useEffect(() => {
         if (post) {
             setFormData({
-                title: post.title,
-                content: post.content,
-                excerpt: post.excerpt || "",
+                title: parseHtmlContent(post.title),
+                content: parseHtmlContent(post.content),
+                excerpt: post.excerpt ? parseHtmlContent(post.excerpt) : "",
                 status: post.status,
                 featuredImage: post.featuredImage || "",
                 categories: post.categories?.map((cat) => cat.id) || [],
@@ -84,10 +102,21 @@ export default function PostForm({ post, onSuccess, onCancel }: PostFormProps) {
 
             if (post) {
                 // Update existing post
-                const updateData: UpdatePostData = { ...formData, id: post.id };
+                // Ensure categories is an array of numbers
+                const categories = formData.categories ? formData.categories.map((id) => (typeof id === "string" ? parseInt(id, 10) : id)) : [];
+
+                const updateData: UpdatePostData = {
+                    ...formData,
+                    id: post.id,
+                    categories, // Ensure this is properly set
+                };
+
+                console.log("Submitting update with data:", updateData);
+                console.log("Categories being sent:", updateData.categories);
                 result = await updatePost(updateData);
             } else {
                 // Create new post
+                console.log("Creating new post with data:", formData);
                 result = await createPost(formData);
             }
 
@@ -110,10 +139,17 @@ export default function PostForm({ post, onSuccess, onCancel }: PostFormProps) {
     };
 
     const handleCategoryChange = (categoryId: number, checked: boolean) => {
-        setFormData((prev) => ({
-            ...prev,
-            categories: checked ? [...(prev.categories || []), categoryId] : (prev.categories || []).filter((id) => id !== categoryId),
-        }));
+        console.log(`Category ${categoryId} ${checked ? "checked" : "unchecked"}`);
+        setFormData((prev) => {
+            const updatedCategories = checked ? [...(prev.categories || []), categoryId] : (prev.categories || []).filter((id) => id !== categoryId);
+
+            console.log("Updated categories:", updatedCategories);
+
+            return {
+                ...prev,
+                categories: updatedCategories,
+            };
+        });
     };
 
     const handleTagAdd = (tagName: string) => {
@@ -401,8 +437,8 @@ export default function PostForm({ post, onSuccess, onCancel }: PostFormProps) {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="draft">Draft</option>
-                            <option value="published">Published</option>
-                            <option value="private">Private</option>
+                            {!isContributor && <option value="published">Published</option>}
+                            {!isContributor && <option value="private">Private</option>}
                         </select>
                     </div>
 

@@ -18,12 +18,9 @@ export default function Navbar() {
 
     const handleLogout = async () => {
         try {
-            logout();
+            await logout(); // Ensure logout completes before redirecting
             setIsMobileMenuOpen(false);
-            // Small delay to ensure logout completes
-            setTimeout(() => {
-                router.push("/");
-            }, 100);
+            router.push("/");
         } catch (error) {
             console.error("Logout error:", error);
         }
