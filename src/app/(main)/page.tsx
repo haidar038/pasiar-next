@@ -1,84 +1,72 @@
-// File: app/page.tsx
-// Ini adalah Server Component, tempat kita mengambil data dari WordPress.
+import BudayaItemCard from "@/app/components/BudayaItemCard";
 
-// Komponen untuk menampilkan data (dibuat terpisah agar rapi)
-import CagarBudayaCard from '@/app/components/CagarBudayaCard';
-// Komponen untuk form login (ini akan menjadi Client Component)
-import RegistrationForm from '../components/RegistrationForm';
-import LoginForm from '@/app/components/LoginForm';
-
-// Tipe data untuk Cagar Budaya agar kode lebih aman
-interface CagarBudaya {
+// Definisikan tipe data yang lebih umum
+interface BudayaItem {
     id: number;
     title: {
         rendered: string;
     };
     slug: string;
+    type: string; // 'cagar_budaya', 'kesenian', etc.
     acf: {
-        lokasi: string;
-        // tambahkan field acf lain jika perlu
+        lokasi?: string;
+        // tambahkan field lain yang mungkin ada
     };
 }
 
-// Fungsi untuk mengambil data dari WordPress API
-async function getCagarBudaya() {
+async function getRecentItems() {
     try {
-        // Kita gunakan fetch langsung di sini karena ini adalah Server Component
-        const res = await fetch(`${process.env.WORDPRESS_API_URL}/wp/v2/cagar_budaya`, {
-            // Opsi revalidate untuk memastikan data tidak terlalu usang
-            next: { revalidate: 60 },
-        });
+        // Ambil 3 item terbaru dari Cagar Budaya dan Kesenian
+        const [cagarBudayaRes, kesenianRes] = await Promise.all([
+            fetch(`${process.env.WORDPRESS_API_URL}/wp/v2/cagar_budaya?per_page=3`, { next: { revalidate: 60 } }),
+            fetch(`${process.env.WORDPRESS_API_URL}/wp/v2/kesenian?per_page=3`, { next: { revalidate: 60 } }),
+        ]);
 
-        if (!res.ok) {
-            throw new Error('Gagal mengambil data cagar budaya');
+        if (!cagarBudayaRes.ok || !kesenianRes.ok) {
+            // Tidak melempar error agar halaman tidak rusak jika salah satu gagal
+            console.error("Gagal mengambil data terbaru dari salah satu endpoint");
+            return [];
         }
 
-        const data: CagarBudaya[] = await res.json();
-        return data;
+        const cagarBudaya: BudayaItem[] = await cagarBudayaRes.json();
+        const kesenian: BudayaItem[] = await kesenianRes.json();
+
+        // Gabungkan dan kembalikan
+        return [...cagarBudaya, ...kesenian];
     } catch (error) {
         console.error(error);
-        return []; // Kembalikan array kosong jika terjadi error
+        return [];
     }
 }
 
-// Komponen Halaman Utama
 export default async function HomePage() {
-    // Panggil fungsi untuk mengambil data
-    const daftarCagarBudaya = await getCagarBudaya();
+    const recentItems = await getRecentItems();
 
     return (
-        <main className="p-8">
-            <section className="mb-12">
-                <h1 className="text-4xl font-bold mb-4">Uji Coba Autentikasi Kontributor</h1>
-                <div className="flex flex-wrap gap-8">
-                    <div>
-                        <h2 className="text-2xl font-semibold mb-2">Login</h2>
-                        <LoginForm />
-                    </div>
-                    <div>
-                        <h2 className="text-2xl font-semibold mb-2">Registrasi</h2>
-                        <RegistrationForm />
-                    </div>
+        <>
+            {/* Hero Section */}
+            <section className="bg-blue-700 text-white">
+                <div className="container mx-auto text-center py-20 px-4">
+                    <h1 className="text-4xl md:text-5xl font-extrabold">Menjelajahi Kekayaan Budaya Ternate</h1>
+                    <p className="mt-4 text-lg md:text-xl text-blue-200 max-w-3xl mx-auto">
+                        Sebuah platform digital untuk mendokumentasikan, melestarikan, dan berbagi warisan budaya Moloku Kie Raha.
+                    </p>
                 </div>
             </section>
 
-            <hr className="my-8" />
-
-            <section>
-                <h1 className="text-4xl font-bold mb-4">Uji Coba Data dari WordPress</h1>
-                <p className="mb-4">Data di bawah ini ditarik langsung dari API WordPress Anda.</p>
-
-                {daftarCagarBudaya.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {daftarCagarBudaya.map((item) => (
-                            // Render komponen Card untuk setiap item
-                            <CagarBudayaCard key={item.id} item={item} />
+            {/* Konten Terbaru */}
+            <section className="container mx-auto py-16 px-4">
+                <h2 className="text-3xl font-bold text-center mb-10">Sorotan Budaya Terbaru</h2>
+                {recentItems.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {recentItems.map((item) => (
+                            <BudayaItemCard key={`${item.type}-${item.id}`} item={item} />
                         ))}
                     </div>
                 ) : (
-                    <p>Tidak ada data cagar budaya yang bisa ditampilkan atau terjadi error saat mengambil data.</p>
+                    <p className="text-center text-gray-600">Saat ini belum ada konten yang bisa ditampilkan.</p>
                 )}
             </section>
-        </main>
+        </>
     );
 }

@@ -1,21 +1,14 @@
-import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
-import './globals.css';
-import Navbar from './components/Navbar';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+// Impor Navbar yang sudah diperbarui
+import Navbar from "./components/Navbar";
 
-const geistSans = Geist({
-    variable: '--font-geist-sans',
-    subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-    variable: '--font-geist-mono',
-    subsets: ['latin'],
-});
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-    title: 'Pusdatin Budaya Ternate',
-    description: 'Pusat Data dan Informasi Kebudayaan Kota Ternate',
+    title: "Pusdatin Budaya Ternate",
+    description: "Pusat Data dan Informasi Kebudayaan Kota Ternate",
 };
 
 export default function RootLayout({
@@ -24,10 +17,11 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en">
-            <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <html lang="id">
+            <body className={`${inter.className} bg-gray-50`}>
                 <Navbar />
-                {children}
+                <main>{children}</main>
+                {/* Anda bisa menambahkan komponen Footer di sini nanti */}
             </body>
         </html>
     );

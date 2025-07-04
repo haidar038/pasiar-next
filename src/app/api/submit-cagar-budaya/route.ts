@@ -1,280 +1,89 @@
 // File: src/app/api/submit-cagar-budaya/route.ts
-import { NextResponse } from 'next/server';
+// Menggunakan sintaks App Router - VERSI EKSPLISIT & AMAN
+
+import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { title, userId, ...acfData } = body;
 
-        console.log('Received data:', { title, userId, acfData });
-
-        // Define explicit field mapping to ensure correct WordPress field names
-        const fieldMapping: { [key: string]: string } = {
-            lokasi: 'lokasi',
-            nilaiSejarah: 'nilai_sejarah',
-            nilaiBudaya: 'nilai_budaya',
-            sumberInformasi: 'sumber_informasi',
-            jenisBangunan: 'jenis_bangunan',
-            usiaBangunan: 'usia_bangunan',
-            kondisiBangunan: 'kondisi_bangunan',
-            nilaiArsitektur: 'nilai_arsitektur',
-            jenisSitus: 'jenis_situs',
-            luasSitus: 'luas_situs',
-            kondisiSitus: 'kondisi_situs',
-            jenisKawasan: 'jenis_kawasan',
-            luasKawasan: 'luas_kawasan',
-            kondisiKawasan: 'kondisi_kawasan',
-            jenisBenda: 'jenis_benda',
-            deskripsiBenda: 'deskripsi_benda',
-            tahunPenemuan: 'tahun_penemuan',
-            kondisiBenda: 'kondisi_benda',
-            jenisStruktur: 'jenis_struktur',
-            deskripsiStruktur: 'deskripsi_struktur',
-            tahunDibangun: 'tahun_dibangun',
-            kondisiStruktur: 'kondisi_struktur',
-        };
-
-        // Build ACF fields object with proper field names
+        // --- Langkah 1: Membangun Objek ACF secara Eksplisit ---
+        // Kita akan membuat objek acfFields secara manual untuk memastikan
+        // semua data yang ada di-mapping dengan benar ke nama field snake_case.
         const acfFields: { [key: string]: any } = {};
-        const metaFields: { [key: string]: any } = {};
 
-        // Add supabase_user_id first
-        acfFields['supabase_user_id'] = userId;
-        metaFields['supabase_user_id'] = userId;
+        // Mapping dari camelCase (frontend) ke snake_case (WordPress ACF)
+        // Hanya tambahkan field jika nilainya ada (tidak null/kosong)
+        if (body.lokasi) acfFields.lokasi = body.lokasi;
+        if (body.nilaiSejarah) acfFields.nilai_sejarah = body.nilaiSejarah;
+        if (body.nilaiBudaya) acfFields.nilai_budaya = body.nilaiBudaya;
+        if (body.sumberInformasi) acfFields.sumber_informasi = body.sumberInformasi;
+        if (body.jenisBangunan) acfFields.jenis_bangunan = body.jenisBangunan;
+        if (body.usiaBangunan) acfFields.usia_bangunan = body.usiaBangunan;
+        if (body.kondisiBangunan) acfFields.kondisi_bangunan = body.kondisiBangunan;
+        if (body.nilaiArsitektur) acfFields.nilai_arsitektur = body.nilaiArsitektur;
+        if (body.jenisSitus) acfFields.jenis_situs = body.jenisSitus;
+        if (body.luasSitus) acfFields.luas_situs = body.luasSitus;
+        if (body.kondisiSitus) acfFields.kondisi_situs = body.kondisiSitus;
+        if (body.jenisKawasan) acfFields.jenis_kawasan = body.jenisKawasan;
+        if (body.luasKawasan) acfFields.luas_kawasan = body.luasKawasan;
+        if (body.kondisiKawasan) acfFields.kondisi_kawasan = body.kondisiKawasan;
+        if (body.jenisBenda) acfFields.jenis_benda = body.jenisBenda;
+        if (body.deskripsiBenda) acfFields.deskripsi_benda = body.deskripsiBenda;
+        if (body.tahunPenemuan) acfFields.tahun_penemuan = body.tahunPenemuan;
+        if (body.kondisiBenda) acfFields.kondisi_benda = body.kondisiBenda;
+        if (body.jenisStruktur) acfFields.jenis_struktur = body.jenisStruktur;
+        if (body.deskripsiStruktur) acfFields.deskripsi_struktur = body.deskripsiStruktur;
+        if (body.tahunDibangun) acfFields.tahun_dibangun = body.tahunDibangun;
+        if (body.kondisiStruktur) acfFields.kondisi_struktur = body.kondisiStruktur;
+        if (body.userId) acfFields.supabase_user_id = body.userId;
 
-        // Process other fields
-        for (const key in acfData) {
-            const value = acfData[key];
-
-            // Only include non-empty values
-            if (value !== null && value !== undefined && value !== '') {
-                // Use explicit mapping if exists, otherwise convert to snake_case
-                const wpFieldName = fieldMapping[key] || key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-                acfFields[wpFieldName] = value;
-                metaFields[wpFieldName] = value;
-            }
-        }
-
-        console.log('ACF Fields to send:', acfFields);
-
-        // WordPress Authentication
+        // --- Langkah 2: Otentikasi ke WordPress ---
         const user = process.env.WORDPRESS_API_USER;
         const pass = process.env.WORDPRESS_API_PASS;
-        const wpApiUrl = process.env.WORDPRESS_API_URL;
 
-        if (!user || !pass || !wpApiUrl) {
-            throw new Error('WordPress credentials or URL not found in environment variables.');
+        if (!user || !pass) {
+            throw new Error("Kredensial WordPress tidak ditemukan di environment variables.");
         }
 
-        // Get JWT token
+        const wpApiUrl = process.env.WORDPRESS_API_URL;
         const tokenResponse = await fetch(`${wpApiUrl}/jwt-auth/v1/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username: user, password: pass }),
         });
 
         if (!tokenResponse.ok) {
             const errorDetails = await tokenResponse.text();
-            console.error('Token error:', errorDetails);
-            throw new Error(`Failed to get authentication token. Details: ${errorDetails}`);
+            throw new Error(`Gagal mendapatkan token otentikasi. Detail: ${errorDetails}`);
         }
-
         const tokenData = await tokenResponse.json();
         const token = tokenData.token;
 
-        // METHOD 1: Try creating post with ACF data in one request
-        const postData = {
-            title: title,
-            status: 'pending',
-            acf: acfFields,
-        };
-
-        console.log('Sending to WordPress:', JSON.stringify(postData, null, 2));
-
-        let postResponse;
-        let postId;
-
-        try {
-            const createPostResponse = await fetch(`${wpApiUrl}/wp/v2/cagar_budaya`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(postData),
-            });
-
-            if (!createPostResponse.ok) {
-                const errorData = await createPostResponse.json();
-                console.error('WordPress Post Creation Error:', errorData);
-                throw new Error(`Failed to create post in WordPress: ${JSON.stringify(errorData)}`);
-            }
-
-            postResponse = await createPostResponse.json();
-            postId = postResponse.id;
-            console.log('Post created with ID:', postId);
-        } catch (createError) {
-            console.error('Method 1 failed, trying alternative approach:', createError);
-
-            // METHOD 2: Create post first, then update with ACF data
-            const basicPostResponse = await fetch(`${wpApiUrl}/wp/v2/cagar_budaya`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    title: title,
-                    status: 'pending',
-                }),
-            });
-
-            if (!basicPostResponse.ok) {
-                const errorData = await basicPostResponse.json();
-                throw new Error(`Failed to create basic post: ${JSON.stringify(errorData)}`);
-            }
-
-            postResponse = await basicPostResponse.json();
-            postId = postResponse.id;
-            console.log('Basic post created with ID:', postId);
-        }
-
-        // METHOD 3: Update post with ACF data using multiple approaches
-        const updateMethods = [
-            // Approach 1: Standard ACF update
-            {
-                name: 'Standard ACF Update',
-                payload: { acf: acfFields },
-            },
-            // Approach 2: Meta fields update
-            {
-                name: 'Meta Fields Update',
-                payload: { meta: metaFields },
-            },
-            // Approach 3: Mixed approach with prefixed meta fields
-            {
-                name: 'Prefixed Meta Fields',
-                payload: {
-                    meta: Object.fromEntries(Object.entries(metaFields).map(([key, value]) => [`_${key}`, value])),
-                },
-            },
-        ];
-
-        let updateSuccess = false;
-
-        for (const method of updateMethods) {
-            try {
-                console.log(`Trying ${method.name}...`);
-
-                const updateResponse = await fetch(`${wpApiUrl}/wp/v2/cagar_budaya/${postId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify(method.payload),
-                });
-
-                if (updateResponse.ok) {
-                    const updateData = await updateResponse.json();
-                    console.log(`${method.name} successful`);
-
-                    // Check if ACF data is present
-                    if (updateData.acf && Object.values(updateData.acf).some((val) => val !== null)) {
-                        updateSuccess = true;
-                        console.log('ACF data successfully saved!');
-                        break;
-                    }
-                } else {
-                    const errorData = await updateResponse.json();
-                    console.log(`${method.name} failed:`, errorData);
-                }
-            } catch (error) {
-                console.log(`${method.name} error:`, error);
-            }
-        }
-
-        // METHOD 4: If all above methods fail, try direct database approach via custom endpoint
-        if (!updateSuccess) {
-            console.log('Trying custom meta update approach...');
-
-            try {
-                // This approach manually sets meta fields
-                const customUpdatePromises = Object.entries(acfFields).map(async ([fieldKey, fieldValue]) => {
-                    // Try both with and without underscore prefix
-                    const variations = [fieldKey, `_${fieldKey}`, `field_${fieldKey}`];
-
-                    for (const variation of variations) {
-                        try {
-                            const metaUpdateResponse = await fetch(`${wpApiUrl}/wp/v2/cagar_budaya/${postId}`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    Authorization: `Bearer ${token}`,
-                                },
-                                body: JSON.stringify({
-                                    meta: {
-                                        [variation]: fieldValue,
-                                    },
-                                }),
-                            });
-
-                            if (metaUpdateResponse.ok) {
-                                console.log(`Successfully updated ${fieldKey} as ${variation}`);
-                                break;
-                            }
-                        } catch (error) {
-                            console.log(`Failed to update ${fieldKey} as ${variation}:`, error);
-                        }
-                    }
-                });
-
-                await Promise.all(customUpdatePromises);
-            } catch (customError) {
-                console.error('Custom meta update failed:', customError);
-            }
-        }
-
-        // Get the final post data to verify what was saved
-        // Wait a moment for WordPress to process the updates
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        const finalPostResponse = await fetch(`${wpApiUrl}/wp/v2/cagar_budaya/${postId}?context=edit`, {
+        // --- Langkah 3: Kirim data ke WordPress dengan Objek ACF yang Sudah Dibangun ---
+        const createPostResponse = await fetch(`${wpApiUrl}/wp/v2/cagar_budaya`, {
+            method: "POST",
             headers: {
+                "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
             },
+            body: JSON.stringify({
+                title: body.title,
+                status: "pending",
+                fields: acfFields, // PENTING: Gunakan 'fields' bukan 'acf' untuk plugin JWT
+            }),
         });
 
-        const finalPostData = await finalPostResponse.json();
-        console.log('Final post data ACF:', finalPostData.acf);
+        if (!createPostResponse.ok) {
+            const errorData = await createPostResponse.json();
+            throw new Error(`Gagal mengirim data ke WordPress: ${JSON.stringify(errorData)}`);
+        }
 
-        // Check if any ACF fields were saved
-        const savedAcfFields = finalPostData.acf || {};
-        const savedFieldCount = Object.values(savedAcfFields).filter((val) => val !== null && val !== '').length;
+        const postData = await createPostResponse.json();
 
-        return NextResponse.json(
-            {
-                message: savedFieldCount > 0 ? 'Data successfully sent for review with ACF fields!' : 'Post created but ACF fields may need manual verification.',
-                data: finalPostData,
-                sentFields: acfFields,
-                postId: postId,
-                savedAcfFields: savedAcfFields,
-                savedFieldCount: savedFieldCount,
-                debug: {
-                    updateSuccess,
-                    finalAcfCheck: savedAcfFields,
-                },
-            },
-            { status: 201 }
-        );
+        return NextResponse.json({ message: "Data berhasil dikirim untuk ditinjau!", data: postData }, { status: 201 });
     } catch (error: any) {
-        console.error('API Error:', error);
-        return NextResponse.json(
-            {
-                message: error.message || 'Server error occurred',
-                error: error.toString(),
-            },
-            { status: 500 }
-        );
+        console.error("API Error:", error);
+        return NextResponse.json({ message: error.message || "Terjadi kesalahan pada server" }, { status: 500 });
     }
 }

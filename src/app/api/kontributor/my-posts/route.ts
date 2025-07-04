@@ -1,16 +1,27 @@
-// File: src/app/api/kontributor/my-posts/route.ts
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+/*
+================================================================================
+File 1: API Route untuk Mengambil Postingan Kontributor (Backend)
+Lokasi: src/app/api/kontributor/my-posts/route.ts
+Deskripsi: Versi ini telah dioptimalkan untuk mengambil data dari SEMUA 
+Custom Post Types (CPT) dan menggabungkannya menjadi satu daftar.
+Ganti seluruh isi file lama Anda dengan kode ini.
+================================================================================
+*/
+
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+// Daftar semua slug CPT yang ingin kita ambil datanya
+const CPT_SLUGS = ["cagar_budaya", "kesenian", "tokoh", "komunitas", "tradisi_lokal"];
 
 export async function GET(request: Request) {
     try {
-        // Ambil token dari header Authorization
-        const token = request.headers.get('Authorization')?.replace('Bearer ', '');
+        // 1. Validasi token Supabase untuk mendapatkan user ID
+        const token = request.headers.get("Authorization")?.replace("Bearer ", "");
         if (!token) {
-            return NextResponse.json({ message: 'Token tidak ditemukan' }, { status: 401 });
+            return NextResponse.json({ message: "Token tidak ditemukan" }, { status: 401 });
         }
 
-        // Validasi token dengan Supabase untuk mendapatkan user
         const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
         const {
             data: { user },
@@ -18,58 +29,51 @@ export async function GET(request: Request) {
         } = await supabase.auth.getUser(token);
 
         if (userError || !user) {
-            return NextResponse.json({ message: 'Token tidak valid' }, { status: 401 });
+            return NextResponse.json({ message: "Token tidak valid" }, { status: 401 });
         }
 
-        // --- MULAI PERUBAHAN ---
-        // Menggunakan autentikasi JWT, sama seperti pada API submit-cagar-budaya
-
-        // 1. Ambil kredensial dari environment variables
+        // 2. Dapatkan token otentikasi dari WordPress
         const wpApiUser = process.env.WORDPRESS_API_USER;
         const wpApiPass = process.env.WORDPRESS_API_PASS;
+        const wpApiUrl = process.env.WORDPRESS_API_URL;
 
-        if (!wpApiUser || !wpApiPass) {
-            console.error('Kredensial WordPress API (WORDPRESS_API_USER/PASS) tidak ditemukan di .env');
-            return NextResponse.json({ message: 'Konfigurasi server tidak lengkap' }, { status: 500 });
+        if (!wpApiUser || !wpApiPass || !wpApiUrl) {
+            console.error("Kredensial WordPress API tidak lengkap di .env");
+            return NextResponse.json({ message: "Konfigurasi server tidak lengkap" }, { status: 500 });
         }
 
-        // 2. Dapatkan token JWT dari WordPress
-        const wpApiUrl = process.env.WORDPRESS_API_URL;
         const tokenResponse = await fetch(`${wpApiUrl}/jwt-auth/v1/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username: wpApiUser, password: wpApiPass }),
         });
 
         if (!tokenResponse.ok) {
-            throw new Error('Gagal mendapatkan token otentikasi dari WordPress.');
+            throw new Error("Gagal mendapatkan token otentikasi WordPress.");
         }
         const tokenData = await tokenResponse.json();
         const jwtToken = tokenData.token;
 
-        // 3. Ambil data post menggunakan token JWT
-        // Parameter `status` dan `context` tetap diperlukan untuk mengambil post yang belum di-publish.
-        const res = await fetch(`${wpApiUrl}/wp/v2/cagar_budaya?per_page=100&status=publish,pending,draft&context=edit`, {
-            headers: {
-                Authorization: `Bearer ${jwtToken}`,
-            },
-        });
+        // 3. Ambil data dari SEMUA CPT secara paralel
+        const fetchPromises = CPT_SLUGS.map((slug) =>
+            fetch(`${wpApiUrl}/wp/v2/${slug}?per_page=100&status=publish,pending,draft&context=edit`, {
+                headers: {
+                    Authorization: `Bearer ${jwtToken}`,
+                },
+            }).then((res) => res.json())
+        );
 
-        if (!res.ok) {
-            const errorData = await res.json();
-            console.error('Error fetching from WordPress:', errorData);
-            return NextResponse.json({ message: 'Gagal mengambil data dari WordPress', error: errorData }, { status: res.status });
-        }
+        const results = await Promise.all(fetchPromises);
 
-        // --- SELESAI PERUBAHAN ---
+        // Gabungkan semua hasil menjadi satu array
+        const allPosts = results.flat();
 
-        const allPosts = await res.json();
-
-        // Filter postingan yang cocok dengan ID pengguna
+        // 4. Filter postingan yang cocok dengan ID pengguna
         const myPosts = allPosts.filter((post: any) => post.acf?.supabase_user_id === user.id);
 
         return NextResponse.json(myPosts, { status: 200 });
     } catch (error: any) {
+        console.error("API Error in my-posts:", error);
         return NextResponse.json({ message: error.message }, { status: 500 });
     }
 }
